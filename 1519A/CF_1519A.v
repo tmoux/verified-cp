@@ -220,5 +220,5 @@ End ListSpec.
 
 (** Extract the program to Ocaml. 
    See sol.ml for the boilerplate input/output plumbing. *)
-Extraction "1519A/imp.ml" can_distribute.
+Extraction "imp.ml" can_distribute.
 
