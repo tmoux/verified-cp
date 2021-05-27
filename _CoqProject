@@ -1,3 +1,7 @@
 -R ./ VerifiedCP
 
+tutorial/tut.v
+
 1519A/CF_1519A.v
+
+BrokenDevice/broken_device.v

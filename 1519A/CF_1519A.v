@@ -6,6 +6,8 @@ Import ListNotations.
 
 Require Extraction.
 
+(** * Heading test *)
+
 (** Define extraction to Ocaml. *)
 (** Quite unsafe! *)
 Module ExtractionDefs.
@@ -30,6 +32,7 @@ Definition can_distribute (r b d : nat) : bool :=
   (b <=? (r * (d + 1))) && (r <=? (b * (d + 1))).
 
 (** Define problem specification *)
+
 (** A few lemmas about arithmetic that will come in handy. 
     We make heavy use of the [lia] to avoid having to deal with most of these proofs by hand, but for some cases (multiplication by non-constants, we need to help guide the solver: *)
 
@@ -97,7 +100,7 @@ Theorem algorithm_correct : algorithm_iff_correct_distribution.
   split; intros.
   - unfold can_distribute in H.
     rewrite andb_true_iff in H. repeat rewrite Nat.leb_le in H. destruct H as [H1 H2].
-    (*** Case on whether r <= b or b <= r. *)
+    (* Case on whether r <= b or b <= r. *)
     assert (r <= b \/ b <= r) as [Hrb | Hbr]. lia.
     + apply can_make_distr; auto. 
     + apply distribution_flip. apply can_make_distr; auto.
@@ -111,6 +114,7 @@ Qed.
 End InductiveSpec.
 
 Module ListSpec.
+  
 (** Prove that our program returns true if and only if there exists a correct distribution. *)
 Definition packet : Set := nat * nat.
 
@@ -193,12 +197,13 @@ Definition algorithm_iff_correct_distribution :=
   forall r b d, 
     can_distribute r b d = true <-> correct_distribution r b d.
 Theorem algorithm_correct : algorithm_iff_correct_distribution.
+Proof.
   unfold algorithm_iff_correct_distribution.
   intros.
   split; intros.
   - unfold can_distribute in H.
     rewrite andb_true_iff in H. repeat rewrite Nat.leb_le in H. destruct H as [H1 H2].
-    (** Case on whether r <= b or b <= r. *)
+    (* Case on whether r <= b or b <= r. *)
     assert (r <= b \/ b <= r) as [Hrb | Hbr]. lia.
     + apply can_make_distr; auto.
     + apply distribution_flip. apply can_make_distr; auto.

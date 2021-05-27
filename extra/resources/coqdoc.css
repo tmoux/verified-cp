@@ -63,7 +63,10 @@ div:empty{ display: none;}
 
 #main .doc {
     margin: 0;
+    /*margin-bottom: 32px; */
     text-align: justify;
+    font-size: 18px;
+    /* background-color: #90bdff; */
 }
 
 .inlinecode, .code, #main pre {
@@ -194,4 +197,10 @@ ul.doclist {
 
 #toc a h2{
     display: inline;
+}
+
+.paragraph {
+  margin-top: 8px;
+  /* line-height: 32px;   within paragraph */
+  /* margin-bottom: 60px; between paragraphs */
 }
