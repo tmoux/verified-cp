@@ -5,6 +5,7 @@ Import PeanoNat.Nat.
 Import ListNotations.
 Require Extraction.
 Require Import Program.Wf.
+Require Import Arith.Wf_nat.
 
 (** ** Definitions *)
 Module Definitions.
@@ -51,6 +52,23 @@ Lemma div2_le_0 : forall n, n <> 0 ->
 Proof. intros. destruct (div2_le n 0); auto. lia.
 Qed.
 
+Definition encode_nat (n : nat) : message.
+Proof.
+  Check lt_wf_rec.
+  apply (lt_wf_rec). auto.
+  intros n' H.
+  destruct (div2 n' 0) eqn:?.
+  destruct n0, b eqn:?; simpl in *.
+  - (*0, true *) exact [B1].
+  - (*0, false *) exact [].
+  - assert (fst (div2 n' 0) = S n0). rewrite Heqp; auto. 
+    apply (cons B1). apply H with (S n0). rewrite <- H0. apply div2_le_0. destruct n'; discriminate.
+  - assert (fst (div2 n' 0) = S n0). rewrite Heqp; auto. 
+    apply (cons B0). apply H with (S n0). rewrite <- H0. apply div2_le_0. destruct n'; discriminate.
+Defined.
+Print encode_nat.
+
+(*
 Program Fixpoint encode_nat (n : nat) {measure n}: message := match div2 n 0 with
   | (0, false) => []
   | (0, true)  => [B1]
@@ -68,7 +86,7 @@ Next Obligation.
   destruct (div2_le (S n) 0). auto.
   assert (fst (div2 (S n) 0) = m). rewrite <- Heq_anonymous. auto. lia.
 Defined.
-
+*)
 
 Fixpoint decode_nat (x : message) : nat := match x with
   | [] => 0
@@ -465,9 +483,46 @@ Proof.
      Since we know that it cannot be a strict prefix since its length is >= 60, it must indeed be equal. *)
 Qed.
 
+(*
+Lemma nat_strong_induction : forall (P : nat -> Prop),
+  (forall n, (forall m, m < n -> P m) -> P n) ->
+  forall n, P n.
+Proof.
+  intros P IH n.
+  assert (H0 : P 0). { apply IH; intros; inversion H. }
+  assert (strong_induction_all : forall n, (forall m, m <= n -> P m)).
+  { induction n0; intros k H. inversion H. auto.
+    inversion H. subst. apply IH; intros. apply IHn0. lia.
+    apply IHn0. auto. }
+  eauto using strong_induction_all.
+Qed.
+*)
+
+Lemma encode_nat_recurse : forall n m b,
+  n <> 0 ->
+  div2 n 0 = (m, b) ->
+  encode_nat n = match b with
+    | false => B0 :: encode_nat m
+    | true  => B1 :: encode_nat m
+  end.
+Proof.
+  intros n.
+  induction n using lt_wf_rec; intros.
+  Admitted.
+
 Lemma encode_inv : forall X,
   X = decode_nat (encode_nat X).
-Proof. Admitted.
+Proof.
+  intros.
+  induction X using lt_wf_ind. 
+  destruct (div2 X 0) eqn:?. destruct X. auto. 
+  assert (n < S X). { assert (n = fst (div2 (S X) 0)). rewrite Heqp. auto. rewrite H0. apply div2_le_0; auto. }
+  specialize H with n.
+  pose proof (encode_nat_recurse (S X) n b).
+  rewrite H1; auto. simpl. destruct b; simpl; rewrite <- H; auto.
+  admit.
+  admit.
+Admitted.
 
 Lemma equal_message_decoding : forall m1 m2,
   equal_message m1 m2 ->
