@@ -4,6 +4,7 @@ Require Import List.
 Import PeanoNat.Nat.
 Import ListNotations.
 Require Extraction.
+Require Import Program.Wf.
 
 (** ** Definitions *)
 Module Definitions.
@@ -14,7 +15,61 @@ Definition message := list bit.
 Definition packet : Set := bit * bit * bit.
 Definition chunk : Set := bool * bool * bool.
 
-Fixpoint encode_nat (n : nat) : message. Admitted.
+Fixpoint div2 (n acc : nat) : nat * bool := match n with
+  | 0       => (0,false)
+  | 1       => (0,true)
+  | S (S n) => div2 n (S acc)
+  end.
+
+Lemma div2_nk : forall n k,
+   fst (div2 n (S k)) <= S (fst (div2 n k)) /\
+   fst (div2 (S n) (S k)) <= S (fst (div2 (S n) k)).
+Proof.
+  induction n; intros.
+  simpl. lia.
+  split. destruct (IHn k). auto. 
+  simpl. destruct (IHn (S k)). lia.
+Qed.
+
+Lemma div2_le : forall n k, n <> 0 -> 
+  fst (div2 n k) < n + k /\
+  fst (div2 (S n) k) < S n + k.
+Proof.
+  intros.
+  generalize dependent k.
+  induction n; intros. exfalso; apply H; auto.
+  destruct n. simpl. lia.
+  simpl. specialize IHn with k. destruct IHn as [IH1 IH2]. auto.
+  split. change (div2 n (S k)) with (div2 (S (S n)) k). lia.
+  destruct n. simpl. lia.
+  simpl. change (div2 n (S (S k))) with (div2 (S (S n)) (S k)). 
+  pose proof (div2_nk (S (S n)) k). lia.
+Qed.
+
+Lemma div2_le_0 : forall n, n <> 0 ->
+  fst (div2 n 0) < n.
+Proof. intros. destruct (div2_le n 0); auto. lia.
+Qed.
+
+Program Fixpoint encode_nat (n : nat) {measure n}: message := match div2 n 0 with
+  | (0, false) => []
+  | (0, true)  => [B1]
+  | (m, false) => B0 :: encode_nat m
+  | (m, true)  => B1 :: encode_nat m
+  end.
+Next Obligation.
+  destruct n. inversion Heq_anonymous. subst. unfold "<>" in H.
+  exfalso; apply H; auto.
+  pose proof (div2_le_0 (S n)). 
+  assert (fst (div2 (S n) 0) = m). rewrite <- Heq_anonymous. auto. lia.
+Defined.
+Next Obligation. 
+  destruct n. inversion Heq_anonymous. 
+  destruct (div2_le (S n) 0). auto.
+  assert (fst (div2 (S n) 0) = m). rewrite <- Heq_anonymous. auto. lia.
+Defined.
+
+
 Fixpoint decode_nat (x : message) : nat := match x with
   | [] => 0
   | x :: xs => (if x then 1 else 0) + 2 * decode_nat xs
@@ -296,16 +351,6 @@ Fixpoint count_broken (p : list chunk) := match p with
   | _ => 0
   end.
 
-(** Encoding a message [B0] is the same as encoding nothing. May adapt as needed. *)
-Lemma encode_B0 : forall l, encode [B0] l = encode [] l.
-Proof.
-  intros.
-  induction l.
-  simpl. auto.
-  destruct a as [[a b] c].
-  destruct a, b, c; simpl; try rewrite IHl; auto.
-Qed.
-
 (** The number of bits transmitted in a packet depends on the number of true (broken) bits in the chunk. *)
 Lemma number_of_bits_in_packet: forall c msg,
   length (decode_packet (encode_packet c msg)) >= 2 - (sum_chunk c).
@@ -427,7 +472,12 @@ Proof. Admitted.
 Lemma equal_message_decoding : forall m1 m2,
   equal_message m1 m2 ->
   decode_nat m1 = decode_nat m2.
-Proof. Admitted.
+Proof.
+  intros.
+  induction H.
+  - destruct x; simpl; auto.
+  - simpl. induction xs; auto. inversion H; subst. simpl. rewrite IHxs; auto.
+Qed.
 
 Theorem correct_message_for_given_constraints_nat :
   message_preserved_nat 150 40 60.
