@@ -4,4 +4,6 @@ tutorial/tut.v
 
 1519A/CF_1519A.v
 
+BrokenDevice/Definitions.v
+BrokenDevice/EncodeNat.v
 BrokenDevice/broken_device.v

@@ -4,202 +4,18 @@ Require Import List.
 Import PeanoNat.Nat.
 Import ListNotations.
 Require Extraction.
-Require Import Program.Wf.
-Require Import Arith.Wf_nat.
 
-(** ** Definitions *)
-Module Definitions.
-Inductive bit := B1 | B0.
+Require Import VerifiedCP.BrokenDevice.Definitions.
+Require Import VerifiedCP.BrokenDevice.EncodeNat.
 
-Definition broken_list := list bool.
-Definition message := list bit.
-Definition packet : Set := bit * bit * bit.
-Definition chunk : Set := bool * bool * bool.
-
-Fixpoint div2 (n acc : nat) : nat * bool := match n with
-  | 0       => (0,false)
-  | 1       => (0,true)
-  | S (S n) => div2 n (S acc)
-  end.
-
-Lemma div2_nk : forall n k,
-   fst (div2 n (S k)) <= S (fst (div2 n k)) /\
-   fst (div2 (S n) (S k)) <= S (fst (div2 (S n) k)).
-Proof.
-  induction n; intros.
-  simpl. lia.
-  split. destruct (IHn k). auto. 
-  simpl. destruct (IHn (S k)). lia.
-Qed.
-
-Lemma div2_le : forall n k, n <> 0 -> 
-  fst (div2 n k) < n + k /\
-  fst (div2 (S n) k) < S n + k.
-Proof.
-  intros.
-  generalize dependent k.
-  induction n; intros. exfalso; apply H; auto.
-  destruct n. simpl. lia.
-  simpl. specialize IHn with k. destruct IHn as [IH1 IH2]. auto.
-  split. change (div2 n (S k)) with (div2 (S (S n)) k). lia.
-  destruct n. simpl. lia.
-  simpl. change (div2 n (S (S k))) with (div2 (S (S n)) (S k)). 
-  pose proof (div2_nk (S (S n)) k). lia.
-Qed.
-
-Lemma div2_le_0 : forall n, n <> 0 ->
-  fst (div2 n 0) < n.
-Proof. intros. destruct (div2_le n 0); auto. lia.
-Qed.
-
-Definition encode_nat (n : nat) : message.
-Proof.
-  Check lt_wf_rec.
-  apply (lt_wf_rec). auto.
-  intros n' H.
-  destruct (div2 n' 0) eqn:?.
-  destruct n0, b eqn:?; simpl in *.
-  - (*0, true *) exact [B1].
-  - (*0, false *) exact [].
-  - assert (fst (div2 n' 0) = S n0). rewrite Heqp; auto. 
-    apply (cons B1). apply H with (S n0). rewrite <- H0. apply div2_le_0. destruct n'; discriminate.
-  - assert (fst (div2 n' 0) = S n0). rewrite Heqp; auto. 
-    apply (cons B0). apply H with (S n0). rewrite <- H0. apply div2_le_0. destruct n'; discriminate.
-Defined.
-Print encode_nat.
-
-(*
-Program Fixpoint encode_nat (n : nat) {measure n}: message := match div2 n 0 with
-  | (0, false) => []
-  | (0, true)  => [B1]
-  | (m, false) => B0 :: encode_nat m
-  | (m, true)  => B1 :: encode_nat m
-  end.
-Next Obligation.
-  destruct n. inversion Heq_anonymous. subst. unfold "<>" in H.
-  exfalso; apply H; auto.
-  pose proof (div2_le_0 (S n)). 
-  assert (fst (div2 (S n) 0) = m). rewrite <- Heq_anonymous. auto. lia.
-Defined.
-Next Obligation. 
-  destruct n. inversion Heq_anonymous. 
-  destruct (div2_le (S n) 0). auto.
-  assert (fst (div2 (S n) 0) = m). rewrite <- Heq_anonymous. auto. lia.
-Defined.
-*)
-
-Fixpoint decode_nat (x : message) : nat := match x with
-  | [] => 0
-  | x :: xs => (if x then 1 else 0) + 2 * decode_nat xs
-  end.
-
-Fixpoint bools_to_chunks (p : broken_list) : list chunk :=  match p with
-  | a :: b :: c :: rest => (a,b,c) :: bools_to_chunks rest
-  | _ => []
-  end.
-
-Definition sum_chunk '((a,b,c) : chunk) := b2n a + b2n b + b2n c.
-
-Fixpoint packets_to_message (ps : list packet) := match ps with
-  | [] => []
-  | (a,b,c) :: rest => a :: b :: c :: packets_to_message rest
-  end.
-
-Fixpoint message_to_packets (x : message) := match x with
-  | a :: b :: c :: rest => (a,b,c) :: message_to_packets rest
-  | _ => []
-  end.
-
-(** Converting a list of packets to a message and back to packets is the identity. *)
-Lemma packets_message_inverses : forall ps,
-  message_to_packets (packets_to_message ps) = ps.
-Proof.
-  intros.
-  induction ps as [| p ps IH].
-  - reflexivity.
-  - destruct p as [[a b] c]. simpl. rewrite IH. reflexivity.
-Qed.
-
-Definition encode_packet '((a,b,c) : chunk) (x : message) : packet := 
-    let '(b1, b2) := (match x with
-      | []                => (B0 , B0)
-      | [b1']             => (b1', B0)
-      | b1' :: b2' :: bs' => (b1', b2')
-    end) in
-    match sum_chunk (a,b,c) with
-    | 0 => (match b1, b2 with
-        | B0, B0 => (B0, B1, B1)
-        | B0, B1 => (B1, B1, B1)
-        | B1, B0 => (B1, B0, B0)
-        | B1, B1 => (B1, B0, B1)
-        end)
-    | 1 => if a then (match b1 with
-        | B0 => (B0, B0, B1)
-        | B1 => (B0, B1, B0)
-        end)
-        else if c then (match b1 with
-        | B0 => (B1, B1, B0)
-        | B1 => (B0, B1, B0)
-        end)
-        else (match b1, b2 with
-        | B0, _  => (B0, B0, B1)
-        | B1, B0 => (B1, B0, B0)
-        | B1, B1 => (B1, B0, B1)
-        end)
-    | _ => (B0, B0, B0)
-    end.
-
-Definition decode_packet (p : packet) : message := match p with
-    | (B0, B0, B0) => []
-    | (B0, B0, B1) => [B0]
-    | (B0, B1, B0) => [B1]
-    | (B0, B1, B1) => [B0; B0]
-    | (B1, B0, B0) => [B1; B0]
-    | (B1, B0, B1) => [B1; B1]
-    | (B1, B1, B0) => [B0]
-    | (B1, B1, B1) => [B0; B1]
-    end.
-
-Fixpoint drop {A} (n : nat) (l : list A) : list A := match n, l with
-  | 0  , l       => l
-  | n  , []      => l
-  | S n, x :: ls => drop n ls
-  end.
-
-Fixpoint encode (x : message) (p : list chunk) : list packet := match p with
-  | c :: rest => let pack := encode_packet c x in
-    pack :: encode (drop (length (decode_packet pack)) x) rest
-  | _ => []
-  end.
-
-Fixpoint decode (x : list packet) : message := match x with
-  | p :: rest => decode_packet p ++ decode rest
-  | _ => []
-  end.      
-
-Definition anna (x : message) (p : broken_list) : message :=
-  packets_to_message (encode x (bools_to_chunks p)).
-
-Definition anna_nat (X : nat) (p : broken_list) := anna (encode_nat X) p.
-
-Definition bruno (x : message) : message :=
-  decode (message_to_packets x).
-
-Definition bruno_nat (x : message) : nat :=
-  decode_nat (bruno x).
-End Definitions.
-
-Module Examples.
-Import Definitions.
+Section Examples.
 Definition falses := [false; false; false; false; false; false; false; false; false].
 Compute anna [B1; B0; B1] falses.
 Compute bruno (anna [B1; B0; B1] falses).
 End Examples.
-  
 
 (** ** Verification *)
-Module Verification.
-Import Definitions.
+Section Verification.
 Inductive matches_broken_list : message -> broken_list -> Prop :=
   | matches_nil  : forall p,
       matches_broken_list [] p
@@ -443,11 +259,6 @@ Definition message_preserved (N K L : nat) := forall x p,
   length x <= L ->
   equal_message (bruno (anna x p)) x.
 
-Definition message_preserved_nat (N K L : nat) := forall X p, 
-  length p = N ->
-  count_broken (bools_to_chunks p) = K ->
-  length (encode_nat X) <= L ->
-  bruno_nat (anna_nat X p) = X.
 
 Fixpoint div3 (n : nat) := match n with
   | S (S (S n')) => 1 + div3 n'
@@ -483,46 +294,23 @@ Proof.
      Since we know that it cannot be a strict prefix since its length is >= 60, it must indeed be equal. *)
 Qed.
 
-(*
-Lemma nat_strong_induction : forall (P : nat -> Prop),
-  (forall n, (forall m, m < n -> P m) -> P n) ->
-  forall n, P n.
-Proof.
-  intros P IH n.
-  assert (H0 : P 0). { apply IH; intros; inversion H. }
-  assert (strong_induction_all : forall n, (forall m, m <= n -> P m)).
-  { induction n0; intros k H. inversion H. auto.
-    inversion H. subst. apply IH; intros. apply IHn0. lia.
-    apply IHn0. auto. }
-  eauto using strong_induction_all.
-Qed.
-*)
 
-Lemma encode_nat_recurse : forall n m b,
-  n <> 0 ->
-  div2 n 0 = (m, b) ->
-  encode_nat n = match b with
-    | false => B0 :: encode_nat m
-    | true  => B1 :: encode_nat m
-  end.
-Proof.
-  intros n.
-  induction n using lt_wf_rec; intros.
-  Admitted.
 
-Lemma encode_inv : forall X,
-  X = decode_nat (encode_nat X).
-Proof.
-  intros.
-  induction X using lt_wf_ind. 
-  destruct (div2 X 0) eqn:?. destruct X. auto. 
-  assert (n < S X). { assert (n = fst (div2 (S X) 0)). rewrite Heqp. auto. rewrite H0. apply div2_le_0; auto. }
-  specialize H with n.
-  pose proof (encode_nat_recurse (S X) n b).
-  rewrite H1; auto. simpl. destruct b; simpl; rewrite <- H; auto.
-  admit.
-  admit.
-Admitted.
+End Verification.
+
+(** Verification for working with nats (instead of lists of bits) *)
+Section VerificationNat.
+
+Definition anna_nat (X : nat) (p : broken_list) :=
+  anna (encode_nat X) p.
+Definition bruno_nat (msg : message) : nat :=
+  decode_nat (bruno msg).
+
+Definition message_preserved_nat (N K L : nat) := forall X p, 
+  length p = N ->
+  count_broken (bools_to_chunks p) = K ->
+  length (encode_nat X) <= L ->
+  bruno_nat (anna_nat X p) = X.
 
 Lemma equal_message_decoding : forall m1 m2,
   equal_message m1 m2 ->
@@ -544,4 +332,4 @@ Theorem correct_message_for_given_constraints_nat :
   apply correct_message_for_given_constraints; auto.
 Qed.
 
-End Verification.
+End VerificationNat.
