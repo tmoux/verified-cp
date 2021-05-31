@@ -15,8 +15,8 @@ Fixpoint decode_nat (x : message) : nat := match x with
   end.
 
 Fixpoint div2 (n acc : nat) : nat * bool := match n with
-  | 0       => (0,false)
-  | 1       => (0,true)
+  | 0       => (acc,false)
+  | 1       => (acc,true)
   | S (S n) => div2 n (S acc)
   end.
 
@@ -50,57 +50,73 @@ Lemma div2_le_0 : forall n, n <> 0 ->
 Proof. intros. destruct (div2_le n 0); auto. lia.
 Qed.
 
-(*
-Definition encode_nat (n : nat) : message.
+Theorem nat_two_induction (P : nat -> Prop) :
+  P 0 -> 
+  P 1 -> 
+  (forall n, P n -> P (S n) -> P (S (S n))) ->
+  (forall n, P n).
 Proof.
-  Check lt_wf_rec.
-  apply (lt_wf_rec). auto.
-  intros n' H.
-  destruct (div2 n' 0) eqn:?.
-  destruct n0, b eqn:?; simpl in *.
-  - (*0, true *) exact [B1].
-  - (*0, false *) exact [].
-  - assert (fst (div2 n' 0) = S n0). rewrite Heqp; auto. 
-    apply (cons B1). apply H with (S n0). rewrite <- H0. apply div2_le_0. destruct n'; discriminate.
-  - assert (fst (div2 n' 0) = S n0). rewrite Heqp; auto. 
-    apply (cons B0). apply H with (S n0). rewrite <- H0. apply div2_le_0. destruct n'; discriminate.
-Defined.
-Print encode_nat.
-*)
+  intros H0 H1 IH n.
+  enough (P n /\ P (S n)) by easy.
+  induction n; intuition. 
+Qed.
 
-Program Fixpoint encode_nat (n : nat) {measure n}: message := match div2 n 0 with
-  | (0, false) => []
-  | (0, true)  => [B1]
-  | (m, false) => B0 :: encode_nat m
-  | (m, true)  => B1 :: encode_nat m
-  end.
-Next Obligation.
-  destruct n. inversion Heq_anonymous. subst. unfold "<>" in H.
-  exfalso; apply H; auto.
-  pose proof (div2_le_0 (S n)). 
-  assert (fst (div2 (S n) 0) = m). rewrite <- Heq_anonymous. auto. lia.
-Defined.
-Next Obligation. 
-  destruct n. inversion Heq_anonymous. 
-  destruct (div2_le (S n) 0). auto.
-  assert (fst (div2 (S n) 0) = m). rewrite <- Heq_anonymous. auto. lia.
-Defined.
-
-(** Reduction lemma. Still don't know how to properly work with Program Fixpoints... *)
-
-Lemma encode_nat_recurse : forall n m b,
-  n > 1 ->
-  div2 n 0 = (m, b) ->
-  encode_nat n = match b with
-    | false => B0 :: encode_nat m
-    | true  => B1 :: encode_nat m
+Lemma div2_eq : forall n k q b,
+  div2 n k = (q, b) ->
+  match b with
+  | true  => 2 * q + 1 = n + 2 * k
+  | false => 2 * q     = n + 2 * k
   end.
 Proof.
-  intros.
-  unfold encode_nat; simpl. rewrite fix_sub_eq. simpl. fold encode_nat. remember (div2 n 0) as A. rewrite H0. 
-  destruct m. simpl. subst. admit.
-  Admitted.
+  induction n using nat_two_induction; intros.
+  - simpl in *. inversion H; subst. auto.
+  - simpl in *. inversion H; subst. lia. 
+  - simpl in H.
+    specialize IHn with (S k) q b. 
+    assert (S (S n) + 2 * k = n + 2 * S k). lia. rewrite H0.
+    apply IHn; auto.
+Qed.
 
+Fixpoint encode_nat' (n n_meas : nat) :message := match n with
+  | 0 => []
+  | 1 => [B1]
+  | S (S _) => (match n_meas with
+    | 0 => [] (* Unreachable from encode_nat *)
+    | S n_meas' => (match div2 n 0 with
+      | (q,true)  => B1 :: encode_nat' q n_meas'
+      | (q,false) => B0 :: encode_nat' q n_meas'
+      end)
+    end)
+  end.
+Definition encode_nat (n : nat) := encode_nat' n n.
+
+Lemma encode_nat'_reduce : forall n X,
+  n <= X ->
+  encode_nat' n X = encode_nat' n n.
+Proof.
+  induction n using lt_wf_ind; intros.
+  destruct n. destruct X; simpl; auto. 
+  destruct n. destruct X; simpl; auto. 
+  destruct X. inversion H0.
+  destruct X. lia.
+  destruct (div2 n 1) eqn:?. 
+  remember (encode_nat' (S (S n)) (S (S X))) as E.
+  assert (E = match div2 (S (S n)) 0 with | (q,true) => B1 :: encode_nat' q (S X) | (q,false) => B0 :: encode_nat' q (S X) end).
+  simpl. subst. auto.
+  rewrite H1.
+  remember (encode_nat' (S (S n)) (S (S n))) as F.
+  assert (F= match div2 (S (S n)) 0 with | (q,true) => B1 :: encode_nat' q (S n) | (q,false) => B0 :: encode_nat' q (S n) end).
+  simpl; subst; auto.
+  rewrite H2.
+  destruct (div2 (S (S n)) 0) as [q b'] eqn:?.
+  clear H1. clear H2. clear HeqF. clear HeqE. clear E. clear F.
+  assert (fst (div2 (S (S n)) 0) = q). rewrite Heqp0. auto. 
+  assert (q < S (S n)). rewrite <- H1. apply div2_le_0. auto.
+  destruct b'.
+  - rewrite H; try lia. assert (encode_nat' q (S n) = encode_nat' q q). rewrite H; try lia; auto. rewrite H3. auto. 
+  - rewrite H; try lia. assert (encode_nat' q (S n) = encode_nat' q q). rewrite H; try lia; auto. rewrite H3. auto. 
+Qed.
+  
 (** The main theorem relating encoding and decoding: encode_nat and decode_nat are inverses. This is the lemma that is needed for the final proof. *)
 Lemma encode_inv : forall X,
   X = decode_nat (encode_nat X).
@@ -110,11 +126,12 @@ Proof.
   destruct (div2 X 0) eqn:?. destruct X. auto. 
   assert (n < S X). { assert (n = fst (div2 (S X) 0)). rewrite Heqp. auto. rewrite H0. apply div2_le_0; auto. }
   specialize H with n.
-  pose proof (encode_nat_recurse (S X) n b).
-  (*
-  destruct (n0, b0).
-  rewrite H1; auto. simpl. destruct b; simpl; rewrite <- H; auto.
-  admit.
-  admit. *)
-Admitted.
-
+  unfold encode_nat, encode_nat'; simpl; fold encode_nat'.
+  destruct X; auto.
+  simpl in Heqp. rewrite Heqp.
+  destruct b.
+  - assert (encode_nat' n (S X) = encode_nat n). { rewrite encode_nat'_reduce; auto; lia. } rewrite H1. simpl. rewrite <- H; auto. 
+    pose proof (div2_eq X 1 n true Heqp). simpl in H2. lia.
+  - assert (encode_nat' n (S X) = encode_nat n). apply encode_nat'_reduce; try lia. rewrite H1. simpl. rewrite <- H; auto. 
+    pose proof (div2_eq X 1 n false Heqp). simpl in H2. lia.
+Qed.

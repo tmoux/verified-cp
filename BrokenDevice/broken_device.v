@@ -306,6 +306,7 @@ Definition anna_nat (X : nat) (p : broken_list) :=
 Definition bruno_nat (msg : message) : nat :=
   decode_nat (bruno msg).
 
+(* maybe change the hypothesis to a bound on X, rather than a bound on length (encode_nat X) *)
 Definition message_preserved_nat (N K L : nat) := forall X p, 
   length p = N ->
   count_broken (bools_to_chunks p) = K ->
